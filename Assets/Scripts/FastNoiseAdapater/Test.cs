@@ -18,6 +18,7 @@ public class Test : MonoBehaviour
     [HideInInspector] public int octaves = 3;
     [HideInInspector] public float lacunarity = 2.0f;
     [HideInInspector] public float gain = 0.5f;
+    [HideInInspector] public float multiplier = 1.0f; // Multiplicateur pour adoucir les valeurs
 
     private FastNoiseLite _fastNoise;
 
@@ -49,12 +50,13 @@ public class Test : MonoBehaviour
                 break;
             case NoiseType.Cellular:
                 _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Cellular);
+                _fastNoise.SetCellularReturnType(FastNoiseLite.CellularReturnType.Distance);
                 break;
             case NoiseType.Value:
                 _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Value);
                 break;
             case NoiseType.Fractal:
-                _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2); // Use OpenSimplex2 as base for fractal
+                _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2); // Utiliser OpenSimplex2 comme base pour le fractal
                 _fastNoise.SetFractalType(FastNoiseLite.FractalType.FBm);
                 break;
         }
@@ -89,7 +91,7 @@ public class Test : MonoBehaviour
             {
                 float sampleX = (x + offset.x) * scale;
                 float sampleY = (y + offset.y) * scale;
-                float noiseValue = _fastNoise.GetNoise(sampleX, sampleY);
+                float noiseValue = _fastNoise.GetNoise(sampleX, sampleY) * multiplier; // Appliquer le multiplicateur
                 noiseMap[y * width + x] = noiseValue;
             }
         });
@@ -103,7 +105,7 @@ public class Test : MonoBehaviour
 public class TestEditor : Editor
 {
     public Texture2D texture;
-    public float scale = 1f;
+    public float scale = 0.2f;
     public Vector2 offset = Vector2.zero;
     public int seed;
     public float generationTime;
@@ -126,6 +128,7 @@ public class TestEditor : Editor
         test.octaves = EditorGUILayout.IntField("Octaves", test.octaves);
         test.lacunarity = EditorGUILayout.FloatField("Lacunarity", test.lacunarity);
         test.gain = EditorGUILayout.FloatField("Gain", test.gain);
+        test.multiplier = EditorGUILayout.FloatField("Multiplier", test.multiplier); // Ajouter le multiplicateur à l'interface
         scale = EditorGUILayout.FloatField("Scale", scale);
         offset = EditorGUILayout.Vector2Field("Offset", offset);
         seed = EditorGUILayout.IntField("Seed", seed);
@@ -145,7 +148,11 @@ public class TestEditor : Editor
         stopwatch.Stop();
         generationTime = stopwatch.ElapsedMilliseconds;
         Color[] colors = new Color[noiseMap.Length];
-        Parallel.For(0, noiseMap.Length, i => { colors[i] = new Color(noiseMap[i], noiseMap[i], noiseMap[i]); });
+        Parallel.For(0, noiseMap.Length, i => 
+        { 
+            float value = (noiseMap[i] + 1) * 0.5f; // Normaliser les valeurs
+            colors[i] = new Color(value, value, value); 
+        });
         texture.SetPixels(colors);
         texture.Apply();
     }
