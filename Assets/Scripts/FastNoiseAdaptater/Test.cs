@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEditor;
@@ -26,7 +27,7 @@ namespace FastNoiseAdaptater
         }
 
         // Stock la config d'un bruit
-        [System.Serializable]
+        [Serializable]
         public class NoiseConfig
         {
             public NoiseType noiseType = NoiseType.OpenSimplex2;
@@ -138,48 +139,76 @@ namespace FastNoiseAdaptater
         private float[] GenerateSingleNoiseMap(FastNoiseLite fastNoise, int width, int height, float scale, Vector2 offset, float multiplier)
         {
             float[] noiseMap = new float[width * height];
+            int numThreads = Environment.ProcessorCount;
+            int rowsPerThread = height / numThreads;
 
-            Parallel.For(0, height, y =>
+            Parallel.For(0, numThreads, threadIndex =>
             {
-                for (int x = 0; x < width; x++)
+                int startRow = threadIndex * rowsPerThread;
+                int endRow = (threadIndex == numThreads - 1) ? height : startRow + rowsPerThread;
+
+                for (int y = startRow; y < endRow; y++)
                 {
-                    float sampleX = (x + offset.x) * scale;
-                    float sampleY = (y + offset.y) * scale;
-                    float noiseValue = fastNoise.GetNoise(sampleX, sampleY) * multiplier;
-                    noiseMap[y * width + x] = noiseValue;
+                    for (int x = 0; x < width; x++)
+                    {
+                        float sampleX = (x + offset.x) * scale;
+                        float sampleY = (y + offset.y) * scale;
+                        float noiseValue = fastNoise.GetNoise(sampleX, sampleY) * multiplier;
+                        noiseMap[y * width + x] = noiseValue;
+                    }
                 }
             });
 
             return noiseMap;
         }
 
+
         // Combiner les cartes de bruit
         private float[] CombineNoiseMaps(float[][] noiseMaps, int width, int height)
         {
             float[] combinedNoiseMap = new float[width * height];
-            for (int i = 0; i < combinedNoiseMap.Length; i++)
+
+            int length = width * height;
+            int numThreads = Environment.ProcessorCount;
+            int itemsPerThread = length / numThreads;
+
+            Parallel.For(0, numThreads, threadIndex =>
             {
-                float combinedValue = 0;
-                foreach (float[] t in noiseMaps)
+                int startIdx = threadIndex * itemsPerThread;
+                int endIdx = (threadIndex == numThreads - 1) ? length : startIdx + itemsPerThread;
+
+                for (int i = startIdx; i < endIdx; i++)
                 {
-                    switch (combineMode)
+                    float combinedValue = 0;
+
+                    for (int j = 0; j < noiseMaps.Length; j++)
                     {
-                        case CombineMode.Add:
-                            combinedValue += t[i];
-                            break;
-                        case CombineMode.Multiply:
-                            combinedValue *= (combinedValue == 0.0f) ? t[i] : combinedValue * t[i];
-                            break;
-                        case CombineMode.Average:
-                            combinedValue += t[i];
-                            break;
+                        switch (combineMode)
+                        {
+                            case CombineMode.Add:
+                                combinedValue += noiseMaps[j][i];
+                                break;
+                            case CombineMode.Multiply:
+                                combinedValue *= (combinedValue == 0.0f) ? noiseMaps[j][i] : combinedValue * noiseMaps[j][i];
+                                break;
+                            case CombineMode.Average:
+                                combinedValue += noiseMaps[j][i];
+                                break;
+                        }
                     }
+
+                    if (combineMode == CombineMode.Average)
+                    {
+                        combinedValue /= noiseMaps.Length;
+                    }
+
+                    combinedNoiseMap[i] = combinedValue;
                 }
-                combinedNoiseMap[i] = (combineMode == CombineMode.Average) ? combinedValue / noiseMaps.Length : combinedValue;
-            }
+            });
 
             return combinedNoiseMap;
         }
+
 
         private float[] SmoothNoise(float[] noiseMap, int width, int height)
         {
