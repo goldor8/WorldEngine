@@ -223,7 +223,7 @@ namespace FastNoiseAdaptater
 
 #if UNITY_EDITOR
     [CustomEditor(typeof(Test))]
-    public class TestEditor : Editor
+    public sealed class TestEditor : Editor
     {
         public Texture2D texture;
         public float scale = 0.2f;
