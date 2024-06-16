@@ -4,6 +4,20 @@ using UnityEngine;
 
 public class Test : MonoBehaviour
 {
+    public enum NoiseType
+    {
+        OpenSimplex2,
+        Perlin,
+        Cellular,
+        Value
+    }
+
+    [HideInInspector] public NoiseType noiseType = NoiseType.OpenSimplex2;
+    [HideInInspector] public float frequency = 0.01f;
+    [HideInInspector] public int octaves = 3;
+    [HideInInspector] public float lacunarity = 2.0f;
+    [HideInInspector] public float gain = 0.5f;
+
     private FastNoiseLite _fastNoise;
 
     private void Awake()
@@ -16,7 +30,26 @@ public class Test : MonoBehaviour
         if (_fastNoise == null)
         {
             _fastNoise = new FastNoiseLite();
-            _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
+            SetNoiseType();
+        }
+    }
+
+    public void SetNoiseType()
+    {
+        switch (noiseType)
+        {
+            case NoiseType.OpenSimplex2:
+                _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
+                break;
+            case NoiseType.Perlin:
+                _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
+                break;
+            case NoiseType.Cellular:
+                _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Cellular);
+                break;
+            case NoiseType.Value:
+                _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Value);
+                break;
         }
     }
 
@@ -24,7 +57,10 @@ public class Test : MonoBehaviour
     {
         InitializeNoise();
         _fastNoise.SetSeed(seed);
-        _fastNoise.SetFrequency(1.0f / scale);
+        _fastNoise.SetFrequency(frequency);
+        _fastNoise.SetFractalOctaves(octaves);
+        _fastNoise.SetFractalLacunarity(lacunarity);
+        _fastNoise.SetFractalGain(gain);
 
         float[] noiseMap = new float[width * height];
 
@@ -44,18 +80,17 @@ public class Test : MonoBehaviour
 }
 
 #if UNITY_EDITOR
-[UnityEditor.CustomEditor(typeof(Test))]
-public class TestEditor : UnityEditor.Editor
+[CustomEditor(typeof(Test))]
+public class TestEditor : Editor
 {
     public Texture2D texture;
     public float scale = 1f;
     public Vector2 offset = Vector2.zero;
-    public int seed = 0;
-    public float generationTime = 0f;
+    public int seed;
+    public float generationTime;
 
     public override void OnInspectorGUI()
     {
-        base.OnInspectorGUI();
         var test = (Test)target;
 
         if (texture == null)
@@ -67,12 +102,18 @@ public class TestEditor : UnityEditor.Editor
         GUILayout.Label($"Generation time: {generationTime}ms");
 
         EditorGUI.BeginChangeCheck();
+        test.noiseType = (Test.NoiseType)EditorGUILayout.EnumPopup("Noise Type", test.noiseType);
+        test.frequency = EditorGUILayout.FloatField("Frequency", test.frequency);
+        test.octaves = EditorGUILayout.IntField("Octaves", test.octaves);
+        test.lacunarity = EditorGUILayout.FloatField("Lacunarity", test.lacunarity);
+        test.gain = EditorGUILayout.FloatField("Gain", test.gain);
         scale = EditorGUILayout.FloatField("Scale", scale);
         offset = EditorGUILayout.Vector2Field("Offset", offset);
         seed = EditorGUILayout.IntField("Seed", seed);
 
         if (EditorGUI.EndChangeCheck())
         {
+            test.SetNoiseType();
             RegenerateTexture(test);
         }
     }
