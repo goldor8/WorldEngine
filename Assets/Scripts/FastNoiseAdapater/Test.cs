@@ -9,7 +9,8 @@ public class Test : MonoBehaviour
         OpenSimplex2,
         Perlin,
         Cellular,
-        Value
+        Value,
+        Fractal
     }
 
     [HideInInspector] public NoiseType noiseType = NoiseType.OpenSimplex2;
@@ -40,9 +41,11 @@ public class Test : MonoBehaviour
         {
             case NoiseType.OpenSimplex2:
                 _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
+                _fastNoise.SetFractalType(FastNoiseLite.FractalType.FBm);
                 break;
             case NoiseType.Perlin:
                 _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
+                _fastNoise.SetFractalType(FastNoiseLite.FractalType.FBm);
                 break;
             case NoiseType.Cellular:
                 _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Cellular);
@@ -50,6 +53,25 @@ public class Test : MonoBehaviour
             case NoiseType.Value:
                 _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Value);
                 break;
+            case NoiseType.Fractal:
+                _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2); // Use OpenSimplex2 as base for fractal
+                _fastNoise.SetFractalType(FastNoiseLite.FractalType.FBm);
+                break;
+        }
+
+        // Appliquer les paramètres de fractal pour les types de bruit qui le supportent
+        if (noiseType == NoiseType.OpenSimplex2 || noiseType == NoiseType.Perlin || noiseType == NoiseType.Fractal)
+        {
+            _fastNoise.SetFractalOctaves(octaves);
+            _fastNoise.SetFractalLacunarity(lacunarity);
+            _fastNoise.SetFractalGain(gain);
+        }
+        else
+        {
+            // Si le type de bruit ne supporte pas les fractals, réinitialiser les paramètres
+            _fastNoise.SetFractalOctaves(1);
+            _fastNoise.SetFractalLacunarity(2.0f);
+            _fastNoise.SetFractalGain(0.5f);
         }
     }
 
@@ -58,9 +80,6 @@ public class Test : MonoBehaviour
         InitializeNoise();
         _fastNoise.SetSeed(seed);
         _fastNoise.SetFrequency(frequency);
-        _fastNoise.SetFractalOctaves(octaves);
-        _fastNoise.SetFractalLacunarity(lacunarity);
-        _fastNoise.SetFractalGain(gain);
 
         float[] noiseMap = new float[width * height];
 
