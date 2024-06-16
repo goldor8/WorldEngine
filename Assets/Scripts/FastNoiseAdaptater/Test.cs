@@ -1,121 +1,184 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
-// TODO: D'autres types de bruits ??
 namespace FastNoiseAdaptater
 {
     public sealed class Test : MonoBehaviour
     {
-        // Types de bruit disponibles
         public enum NoiseType
         {
             OpenSimplex2,
             Perlin,
             Cellular,
             Value,
-            Fractal
+            Fractal,
+            OpenSimplex2S,
+            ValueCubic
         }
 
-        // Paramètres des bruits
-        [HideInInspector] public NoiseType noiseType = NoiseType.OpenSimplex2;
-        [HideInInspector] public float frequency = 0.01f;
-        [HideInInspector] public int octaves = 3;
-        [HideInInspector] public float lacunarity = 2.0f;
-        [HideInInspector] public float gain = 0.5f;
-        [HideInInspector] public float jitter = 0.5f;
-        [HideInInspector] public float multiplier = 1.0f;
-        [HideInInspector] public bool smooth;
-        [HideInInspector] public bool normalize;
+        public enum CombineMode
+        {
+            Add,
+            Multiply,
+            Average
+        }
 
-        private FastNoiseLite _fastNoise;
+        // Stock la config d'un bruit
+        [System.Serializable]
+        public class NoiseConfig
+        {
+            public NoiseType noiseType = NoiseType.OpenSimplex2;
+            public float frequency = 0.01f;
+            public int octaves = 3;
+            public float lacunarity = 2.0f;
+            public float gain = 0.5f;
+            public float jitter = 0.5f;
+            public float multiplier = 1.0f;
+        }
+
+        // Configure les bruits
+        public List<NoiseConfig> noiseConfigs = new List<NoiseConfig>(); // Liste des configurations
+        public CombineMode combineMode = CombineMode.Add;
+        public bool smooth;
+        public bool normalize;
+
+        private readonly List<FastNoiseLite> _fastNoises = new List<FastNoiseLite>();
 
         private void Awake()
         {
             InitializeNoise();
         }
 
-        private void InitializeNoise()
+        public void InitializeNoise()
         {
-            if (_fastNoise == null)
+            _fastNoises.Clear();
+            foreach (NoiseConfig config in noiseConfigs)
             {
-                _fastNoise = new FastNoiseLite();
-                SetNoiseType();
+                var fastNoise = new FastNoiseLite();
+                SetNoiseType(fastNoise, config);
+                _fastNoises.Add(fastNoise);
             }
         }
 
-        // Configurer le type de bruit sélectionné
-        public void SetNoiseType()
+        private void SetNoiseType(FastNoiseLite fastNoise, NoiseConfig config)
         {
-            switch (noiseType)
+            fastNoise.SetFrequency(config.frequency);
+
+            switch (config.noiseType)
             {
                 case NoiseType.Fractal:
                 case NoiseType.OpenSimplex2:
-                    _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
-                    _fastNoise.SetFractalType(FastNoiseLite.FractalType.FBm);
+                    fastNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
+                    fastNoise.SetFractalType(FastNoiseLite.FractalType.FBm);
                     break;
                 case NoiseType.Perlin:
-                    _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
-                    _fastNoise.SetFractalType(FastNoiseLite.FractalType.FBm);
+                    fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Perlin);
+                    fastNoise.SetFractalType(FastNoiseLite.FractalType.FBm);
                     break;
                 case NoiseType.Cellular:
-                    _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Cellular);
-                    _fastNoise.SetCellularReturnType(FastNoiseLite.CellularReturnType.Distance);
-                    _fastNoise.SetCellularJitter(jitter);
+                    fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Cellular);
+                    fastNoise.SetCellularReturnType(FastNoiseLite.CellularReturnType.Distance);
+                    fastNoise.SetCellularJitter(config.jitter);
                     break;
                 case NoiseType.Value:
-                    _fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Value);
+                    fastNoise.SetNoiseType(FastNoiseLite.NoiseType.Value);
+                    break;
+                case NoiseType.OpenSimplex2S:
+                    fastNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2S);
+                    break;
+                case NoiseType.ValueCubic:
+                    fastNoise.SetNoiseType(FastNoiseLite.NoiseType.ValueCubic);
                     break;
             }
 
-            // Appliquer les paramètres de fractal si le type de bruit le supporte
-            if (noiseType == NoiseType.OpenSimplex2 || noiseType == NoiseType.Perlin || noiseType == NoiseType.Fractal)
+            if (config.noiseType is NoiseType.OpenSimplex2 or NoiseType.Perlin or NoiseType.Fractal)
             {
-                _fastNoise.SetFractalOctaves(octaves);
-                _fastNoise.SetFractalLacunarity(lacunarity);
-                _fastNoise.SetFractalGain(gain);
+                fastNoise.SetFractalOctaves(config.octaves);
+                fastNoise.SetFractalLacunarity(config.lacunarity);
+                fastNoise.SetFractalGain(config.gain);
             }
             else
             {
-                // Réinitialiser les paramètres de fractal pour les autres types de bruit
-                _fastNoise.SetFractalOctaves(1);
-                _fastNoise.SetFractalLacunarity(2.0f);
-                _fastNoise.SetFractalGain(0.5f);
+                fastNoise.SetFractalOctaves(1);
+                fastNoise.SetFractalLacunarity(2.0f);
+                fastNoise.SetFractalGain(0.5f);
             }
         }
 
-        // Générer la carte de bruit
+        // Génère la carte de bruit quand il y en a plusieurs
         public float[] GenerateNoiseMap(int width, int height, float scale, Vector2 offset, int seed)
         {
             InitializeNoise();
-            _fastNoise.SetSeed(seed);
-            _fastNoise.SetFrequency(frequency);
 
+            float[][] noiseMaps = new float[noiseConfigs.Count][];
+            for (int i = 0; i < noiseConfigs.Count; i++)
+            {
+                _fastNoises[i].SetSeed(seed);
+                noiseMaps[i] = GenerateSingleNoiseMap(_fastNoises[i], width, height, scale, offset, noiseConfigs[i].multiplier);
+            }
+
+            float[] combinedNoiseMap = CombineNoiseMaps(noiseMaps, width, height);
+
+            if (smooth)
+            {
+                combinedNoiseMap = SmoothNoise(combinedNoiseMap, width, height);
+            }
+
+            if (normalize)
+            {
+                combinedNoiseMap = NormalizeNoise(combinedNoiseMap);
+            }
+
+            return combinedNoiseMap;
+        }
+
+        // Générer une carte de bruit unique
+        private float[] GenerateSingleNoiseMap(FastNoiseLite fastNoise, int width, int height, float scale, Vector2 offset, float multiplier)
+        {
             float[] noiseMap = new float[width * height];
 
-            float[] map = noiseMap;
             Parallel.For(0, height, y =>
             {
                 for (int x = 0; x < width; x++)
                 {
                     float sampleX = (x + offset.x) * scale;
                     float sampleY = (y + offset.y) * scale;
-                    float noiseValue = _fastNoise.GetNoise(sampleX, sampleY) * multiplier;
-                    map[y * width + x] = noiseValue;
+                    float noiseValue = fastNoise.GetNoise(sampleX, sampleY) * multiplier;
+                    noiseMap[y * width + x] = noiseValue;
                 }
             });
 
-            if (smooth)
-            {
-                noiseMap = SmoothNoise(noiseMap, width, height);
-            }
-
-            if (normalize)
-            {
-                noiseMap = NormalizeNoise(noiseMap);
-            }
-
             return noiseMap;
+        }
+
+        // Combiner les cartes de bruit
+        private float[] CombineNoiseMaps(float[][] noiseMaps, int width, int height)
+        {
+            float[] combinedNoiseMap = new float[width * height];
+            for (int i = 0; i < combinedNoiseMap.Length; i++)
+            {
+                float combinedValue = 0;
+                foreach (float[] t in noiseMaps)
+                {
+                    switch (combineMode)
+                    {
+                        case CombineMode.Add:
+                            combinedValue += t[i];
+                            break;
+                        case CombineMode.Multiply:
+                            combinedValue *= (combinedValue == 0.0f) ? t[i] : combinedValue * t[i];
+                            break;
+                        case CombineMode.Average:
+                            combinedValue += t[i];
+                            break;
+                    }
+                }
+                combinedNoiseMap[i] = (combineMode == CombineMode.Average) ? combinedValue / noiseMaps.Length : combinedValue;
+            }
+
+            return combinedNoiseMap;
         }
 
         private float[] SmoothNoise(float[] noiseMap, int width, int height)
@@ -143,7 +206,7 @@ namespace FastNoiseAdaptater
         {
             float min = float.MaxValue;
             float max = float.MinValue;
-            foreach (var value in noiseMap)
+            foreach (float value in noiseMap)
             {
                 if (value < min) min = value;
                 if (value > max) max = value;
@@ -165,8 +228,8 @@ namespace FastNoiseAdaptater
         public Texture2D texture;
         public float scale = 0.2f;
         public Vector2 offset = Vector2.zero;
-        public int seed = 0;
-        public float generationTime = 0f;
+        public int seed;
+        public float generationTime;
 
         public override void OnInspectorGUI()
         {
@@ -181,22 +244,44 @@ namespace FastNoiseAdaptater
             GUILayout.Label($"Generation time: {generationTime}ms");
 
             EditorGUI.BeginChangeCheck();
-            test.noiseType = (Test.NoiseType)EditorGUILayout.EnumPopup("Noise Type", test.noiseType);
-            test.frequency = EditorGUILayout.FloatField("Frequency", test.frequency);
 
-            if (test.noiseType == Test.NoiseType.OpenSimplex2 || test.noiseType == Test.NoiseType.Perlin || test.noiseType == Test.NoiseType.Fractal)
+            // Afficher les paramètres pour chaque configuration de bruit
+            for (int i = 0; i < test.noiseConfigs.Count; i++)
             {
-                test.octaves = EditorGUILayout.IntField("Octaves", test.octaves);
-                test.lacunarity = EditorGUILayout.FloatField("Lacunarity", test.lacunarity);
-                test.gain = EditorGUILayout.FloatField("Gain", test.gain);
+                GUILayout.Label($"Noise {i + 1} Settings");
+                Test.NoiseConfig config = test.noiseConfigs[i];
+                config.noiseType = (Test.NoiseType)EditorGUILayout.EnumPopup("Noise Type", config.noiseType);
+                config.frequency = EditorGUILayout.FloatField("Frequency", config.frequency);
+                if (config.noiseType is Test.NoiseType.OpenSimplex2 or Test.NoiseType.Perlin or Test.NoiseType.Fractal)
+                {
+                    config.octaves = EditorGUILayout.IntField("Octaves", config.octaves);
+                    config.lacunarity = EditorGUILayout.FloatField("Lacunarity", config.lacunarity);
+                    config.gain = EditorGUILayout.FloatField("Gain", config.gain);
+                }
+                if (config.noiseType == Test.NoiseType.Cellular)
+                {
+                    config.jitter = EditorGUILayout.FloatField("Jitter", config.jitter);
+                }
+                config.multiplier = EditorGUILayout.FloatField("Multiplier", config.multiplier);
+
+                // Bouton pour supprimer une configuration de bruit
+                if (GUILayout.Button("Remove Noise"))
+                {
+                    test.noiseConfigs.RemoveAt(i);
+                    i--;
+                }
             }
 
-            if (test.noiseType == Test.NoiseType.Cellular)
+            // Bouton pour ajouter une nouvelle configuration de bruit
+            if (GUILayout.Button("Add Noise"))
             {
-                test.jitter = EditorGUILayout.FloatField("Jitter", test.jitter);
+                test.noiseConfigs.Add(new Test.NoiseConfig());
             }
 
-            test.multiplier = EditorGUILayout.FloatField("Multiplier", test.multiplier);
+            // Paramètres de combinaison
+            GUILayout.Label("Combine Settings");
+            test.combineMode = (Test.CombineMode)EditorGUILayout.EnumPopup("Combine Mode", test.combineMode);
+
             test.smooth = EditorGUILayout.Toggle("Smooth", test.smooth);
             test.normalize = EditorGUILayout.Toggle("Normalize", test.normalize);
             scale = EditorGUILayout.FloatField("Scale", scale);
@@ -205,7 +290,7 @@ namespace FastNoiseAdaptater
 
             if (EditorGUI.EndChangeCheck())
             {
-                test.SetNoiseType();
+                test.InitializeNoise();
                 RegenerateTexture(test);
             }
         }
@@ -214,11 +299,11 @@ namespace FastNoiseAdaptater
         {
             var stopwatch = new System.Diagnostics.Stopwatch();
             stopwatch.Start();
-            var noiseMap = test.GenerateNoiseMap(512, 512, scale, offset, seed);
+            float[] noiseMap = test.GenerateNoiseMap(512, 512, scale, offset, seed);
             stopwatch.Stop();
             generationTime = stopwatch.ElapsedMilliseconds;
 
-            Color[] colors = new Color[noiseMap.Length];
+            var colors = new Color[noiseMap.Length];
             Parallel.For(0, noiseMap.Length, i =>
             {
                 float value = (noiseMap[i] + 1) * 0.5f;
