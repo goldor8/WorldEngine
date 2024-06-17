@@ -1,4 +1,4 @@
-﻿namespace FastNoise
+﻿namespace FastNoiseAdaptater
 {
     public class OpenSimplex2Noise : FastNoise
     {

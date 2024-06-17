@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace FastNoise
+namespace FastNoiseAdaptater
 {
     public class BaseNoise : FastNoise
     {

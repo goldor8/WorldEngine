@@ -2,13 +2,13 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using FastNoise;
+using FastNoiseAdaptater;
 using UnityEditor;
 using UnityEngine;
 
 public class Test : MonoBehaviour
 {
-    public FastNoise.FastNoise fastNoise = new DomainScale(new FractalFBm(new OpenSimplex2Noise()), 0.01f);
+    public FastNoise fastNoise = new DomainScale(new FractalFBm(new OpenSimplex2Noise()), 0.01f);
 
     
     public float[] GenerateNoiseMap(int width, int height, float scale, Vector2 offset, int seed)

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 
-namespace FastNoise
+namespace FastNoiseAdaptater
 {
     public class PerlinNoise : FastNoise
     {
